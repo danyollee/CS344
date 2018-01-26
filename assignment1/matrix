@@ -1,0 +1,214 @@
+#!/bin/bash -e
+
+#Reading the dimensions of the matrix
+#$1 is the file, $2 is the amount of command line args
+findDims(){
+  if [[ $2 -gt 2 ]]
+  then
+    echo "Error, too many arguments" >&2
+    exit 1
+  fi
+  numRows=$(cat $1 | wc -l)
+  numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
+
+  echo "$numRows $numCols"
+
+  return 0
+}
+
+#Transposing the matrix
+transpose(){
+  transposedMatrix="transposedTemp$$"
+  numRows=$(cat $1 | wc -l)
+  numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
+
+  printf "$(rm -f transposedMatrix)"
+
+  for ((i=1; i<="$numCols"; i++))
+  do
+    echo "$(cut -f"$i" $1 | paste -s)" >> transposedMatrix
+  done
+  return 0
+
+}
+
+#Finding the mean. Takes in MxN matrix and returns 1xN row
+# where the first element is the mean of column one, the second
+# element is the mean of column two, and so on
+getMean(){
+  numRows=$(cat $1 | wc -l)
+  numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
+
+  transpose $1
+  printf "$(rm -f temp)"
+  printf "$(rm -f matrixMean)"
+  printf "$(tr -s '\t' < transposedMatrix | tr '\t' ' ' > temp)"
+
+  while read i
+  do
+    sum=0
+    avg=0
+    for num in $i
+    do
+      sum=$(($sum + $num))
+    done
+    avg=$(( $sum/$numRows ))
+    printf "%s\t" "$avg" >> matrixMean
+    temp=$(( ($sum + ($numRows/2)*( ($sum>0)*2-1 )) / $numRows))
+  done < temp
+
+  echo " " >> matrixMean
+
+  return 0
+}
+
+add(){
+  numRows=$(cat $file | wc -l)
+  numCols=$(head -2 $file |tail -1 |tr '\t' '\n' |wc -l)
+
+  numRows2=$(cat $file2 | wc -l)
+  numCols2=$(head -2 $file2 |tail -1 |tr '\t' '\n' |wc -l)
+
+  total=$(( $numRows*$numCols ))
+
+  #Checks to see if the matrix are the same size
+  if [ "$numRows" -ne "$numRows2" ] || [ "$numCols" -ne "$numCols2" ]
+  then
+    echo "Error, matrices are not the same dimensions" >&2
+    exit 1
+  fi
+
+  printf "$(rm -f temp1)"
+  printf "$(tr -s '\t' < $file | tr '\t' ' ' > temp1)"
+
+  printf "$(rm -f temp2)"
+  printf "$(tr -s '\t' < $file2 | tr '\t' ' ' > temp2)"
+
+  printf "$(rm -f addMatrix)"
+
+  sum=0
+
+  arr1=()
+  arr2=()
+
+  while read line1 <&3 && read line2 <&4
+  do
+    for num in $line1
+    do
+      arr1+=("$num")
+    done
+    for num in $line2
+    do
+      arr2+=("$num")
+    done
+  done 3<temp1 4<temp2
+
+  for ((i=0; i<$total; i++))
+  do
+    if [[ $i -gt 0 ]] && [[ $i%$numCols -ne 0 ]]
+    then
+      printf "\t" >> addMatrix
+    fi
+    if [[ $i%$numCols -eq 0 ]] && [[ $i -ne 0 ]]
+    then
+      printf "\n" >> addMatrix
+    fi
+    sum=0
+    sum=$(( ${arr1[$i]}+${arr2[$i]} ))
+    printf "%s" "$sum" >> addMatrix
+  done
+
+  printf "\n" >> addMatrix
+
+}
+
+multiply(){
+  numRows=$(cat $1 | wc -l)
+  numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
+
+  numRows2=$(cat $2 | wc -l)
+  numCols2=$(head -2 $2 |tail -1 |tr '\t' '\n' |wc -l)
+
+  printf "$(rm -f multMatrix)"
+
+  v1=0
+  v2=0
+  v3=0
+  sum=0
+
+  if [ "$numRows" -ne "$numCols2" ]
+  then
+    echo "Error, dimensions do not add up." >&2
+    exit 1
+  fi
+
+  transpose $2
+
+  for ((i=1; i<=$numCols; i++))
+  do
+    for ((j=1; j<=$numCols; j++))
+    do
+      sum=0
+      for ((k=1; k<=$numRows; k++))
+      do
+        v1=$(cat $1 | cut -f $k | head -n $i | tail -n 1)
+        v2=$(cat transposedMatrix | cut -f $k | head -n $j | tail -n 1)
+        v3=$(($v1*$v2))
+        sum=$(($sum + $v3))
+      done
+      printf "%s" "$sum" >> multMatrix
+      if [[ $j%$numCols -ne 0 ]]
+      then
+        mod=$(($j%$numCols))
+        echo "$j % $numCols = $mod"
+        printf "\t" >> multMatrix
+      fi
+    done
+    printf "\n" >> multMatrix
+  done
+
+}
+
+#Prints the matrix out in a visual manner to the console
+printMatrix(){
+  while IFS= read -r line
+  do
+    echo "$line"
+  done < $1
+}
+
+
+#Reading in command line arguments
+#Remember that '$#' is the number of arguments passed to the script
+commandLine=$#
+file=$2 #Takes in which file to read from
+file2=$3
+
+if [ "$1" == "dims" ]
+then
+  findDims $2 $#
+elif [ "$1" == "transpose" ]
+then
+  transpose $2
+  printMatrix transposedMatrix
+elif [ "$1" == "mean" ]
+then
+  getMean $file
+  printMatrix matrixMean
+fi
+
+if [ "$1" == "add" ] || [ "$1" == "multiply" ] && [ $commandLine -ne 3 ]
+then
+  echo "Error, invalid amount of arguments" >&2
+  exit 1
+else
+  if [ "$1" == "add" ]
+  then
+    add
+    printMatrix addMatrix
+  elif [ "$1" == "multiply" ]
+  then
+    multiply $file $file2
+    printMatrix multMatrix
+  fi
+fi
