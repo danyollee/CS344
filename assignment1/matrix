@@ -18,18 +18,14 @@ findDims(){
 
 #Transposing the matrix
 transpose(){
-  transposedMatrix="transposedTemp$$"
+  transposedMatrix="matrixTrans$$"
   numRows=$(cat $1 | wc -l)
   numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
 
-  printf "$(rm -f transposedMatrix)"
-
   for ((i=1; i<="$numCols"; i++))
   do
-    echo "$(cut -f"$i" $1 | paste -s)" >> transposedMatrix
+    echo "$(cut -f"$i" $1 | paste -s)" >> $transposedMatrix
   done
-  return 0
-
 }
 
 #Finding the mean. Takes in MxN matrix and returns 1xN row
@@ -38,36 +34,46 @@ transpose(){
 getMean(){
   numRows=$(cat $1 | wc -l)
   numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
+  matrixMean="matrixMean$$"
+  temp="temp$$"
+  counter=0
 
   transpose $1
-  printf "$(rm -f temp)"
-  printf "$(rm -f matrixMean)"
-  printf "$(tr -s '\t' < transposedMatrix | tr '\t' ' ' > temp)"
+  printf "$(tr -s '\t' < $transposedMatrix | tr '\t' ' ' > $temp)"
 
   while read i
   do
+    counter=$((counter + 1))
     sum=0
     avg=0
     for num in $i
     do
       sum=$(($sum + $num))
     done
-    avg=$(( $sum/$numRows ))
-    printf "%s\t" "$avg" >> matrixMean
-    temp=$(( ($sum + ($numRows/2)*( ($sum>0)*2-1 )) / $numRows))
-  done < temp
+    avg=$(( ($sum + ($numRows/2)*( ($sum>0)*2-1 )) / $numRows))
+    printf "%s" "$avg" >> $matrixMean
+    if [[ $counter -lt $numCols ]]
+    then
+      printf "\t" >> $matrixMean
+    fi
+  done < $temp
 
-  echo " " >> matrixMean
+  echo "" >> $matrixMean
+  printf "$(rm -f $transposedMatrix)"
+  printf "$(rm -f $temp)"
 
   return 0
 }
 
 add(){
-  numRows=$(cat $file | wc -l)
-  numCols=$(head -2 $file |tail -1 |tr '\t' '\n' |wc -l)
+  numRows=$(cat $1 | wc -l)
+  numCols=$(head -2 $1 |tail -1 |tr '\t' '\n' |wc -l)
 
-  numRows2=$(cat $file2 | wc -l)
-  numCols2=$(head -2 $file2 |tail -1 |tr '\t' '\n' |wc -l)
+  numRows2=$(cat $2 | wc -l)
+  numCols2=$(head -2 $2 |tail -1 |tr '\t' '\n' |wc -l)
+  temp1="temp1$$"
+  temp2="temp2$$"
+  addMatrix="addMatrix$$"
 
   total=$(( $numRows*$numCols ))
 
@@ -78,13 +84,9 @@ add(){
     exit 1
   fi
 
-  printf "$(rm -f temp1)"
-  printf "$(tr -s '\t' < $file | tr '\t' ' ' > temp1)"
+  printf "$(tr -s '\t' < $1 | tr '\t' ' ' > $temp1)"
+  printf "$(tr -s '\t' < $2 | tr '\t' ' ' > $temp2)"
 
-  printf "$(rm -f temp2)"
-  printf "$(tr -s '\t' < $file2 | tr '\t' ' ' > temp2)"
-
-  printf "$(rm -f addMatrix)"
 
   sum=0
 
@@ -101,25 +103,26 @@ add(){
     do
       arr2+=("$num")
     done
-  done 3<temp1 4<temp2
+  done 3<$temp1 4<$temp2
 
   for ((i=0; i<$total; i++))
   do
     if [[ $i -gt 0 ]] && [[ $i%$numCols -ne 0 ]]
     then
-      printf "\t" >> addMatrix
+      printf "\t" >> $addMatrix
     fi
     if [[ $i%$numCols -eq 0 ]] && [[ $i -ne 0 ]]
     then
-      printf "\n" >> addMatrix
+      printf "\n" >> $addMatrix
     fi
     sum=0
     sum=$(( ${arr1[$i]}+${arr2[$i]} ))
-    printf "%s" "$sum" >> addMatrix
+    printf "%s" "$sum" >> $addMatrix
   done
 
-  printf "\n" >> addMatrix
-
+  printf "\n" >> $addMatrix
+  printf "$(rm -f $temp1)"
+  printf "$(rm -f $temp2)"
 }
 
 multiply(){
@@ -129,52 +132,55 @@ multiply(){
   numRows2=$(cat $2 | wc -l)
   numCols2=$(head -2 $2 |tail -1 |tr '\t' '\n' |wc -l)
 
-  printf "$(rm -f multMatrix)"
+  if [[ $numCols -ne $numRows2 ]]
+  then
+    echo "Error, matrices are not compatible to multiply together." >&2
+    exit 1
+  fi
+
+  multMatrix="multMatrix$$"
 
   v1=0
   v2=0
   v3=0
   sum=0
 
-  if [ "$numRows" -ne "$numCols2" ]
-  then
-    echo "Error, dimensions do not add up." >&2
-    exit 1
-  fi
-
-  transpose $2
-
-  for ((i=1; i<=$numCols; i++))
+  for ((i=1; i<=$numRows; i++))
   do
-    for ((j=1; j<=$numCols; j++))
+    for ((j=1; j<=$numCols2; j++))
     do
       sum=0
-      for ((k=1; k<=$numRows; k++))
+      for ((k=1; k<=$numCols; k++))
       do
         v1=$(cat $1 | cut -f $k | head -n $i | tail -n 1)
-        v2=$(cat transposedMatrix | cut -f $k | head -n $j | tail -n 1)
-        v3=$(($v1*$v2))
+        v2=$(cat $2 | cut -f $j | head -n $k | tail -n 1)
+        v3=$((v1*v2))
         sum=$(($sum + $v3))
+        if [[ $k -eq $numCols ]]
+        then
+          printf "%s" "$sum" >> $multMatrix
+        fi
       done
-      printf "%s" "$sum" >> multMatrix
-      if [[ $j%$numCols -ne 0 ]]
+      if [[ $j%$numCols2 -ne 0 ]]
       then
-        mod=$(($j%$numCols))
-        echo "$j % $numCols = $mod"
-        printf "\t" >> multMatrix
+        mod=$(($k%$numCols))
+        printf "\t" >> $multMatrix
       fi
     done
-    printf "\n" >> multMatrix
+    printf "\n" >> $multMatrix
   done
 
 }
 
 #Prints the matrix out in a visual manner to the console
 printMatrix(){
+  echo "function"
   while IFS= read -r line
   do
     echo "$line"
   done < $1
+
+  # printf "$(rm -f $1)"
 }
 
 
@@ -189,12 +195,17 @@ then
   findDims $2 $#
 elif [ "$1" == "transpose" ]
 then
-  transpose $2
-  printMatrix transposedMatrix
+  if [[ $# -ne 2 ]]
+  then
+    file=$(cat)
+    echo "$file"
+  fi
+  transpose $file
+  printMatrix $transposedMatrix
 elif [ "$1" == "mean" ]
 then
-  getMean $file
-  printMatrix matrixMean
+  getMean $2
+  printMatrix $matrixMean
 fi
 
 if [ "$1" == "add" ] || [ "$1" == "multiply" ] && [ $commandLine -ne 3 ]
@@ -204,11 +215,14 @@ then
 else
   if [ "$1" == "add" ]
   then
-    add
-    printMatrix addMatrix
+    add $2 $3
+    printMatrix $addMatrix
   elif [ "$1" == "multiply" ]
   then
-    multiply $file $file2
-    printMatrix multMatrix
+    # echo -e "file: $file\tfile2: $file2"
+    multiply $2 $3
+    printMatrix $multMatrix
   fi
 fi
+
+printf "$(rm -f temp"$$"*)"

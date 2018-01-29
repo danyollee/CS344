@@ -491,6 +491,7 @@ echo "$m2" > "$tmp2"
 result "I * M == M" 5
 
 m2="$(generate 15 10 100)"
+# echo "$m2"
 echo "$m2" > "$tmp2"
 [[ "$m2" == "$(./matrix multiply $tmp2 $tmp1)" ]]
 result "M * I == M" 5
